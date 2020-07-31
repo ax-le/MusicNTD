@@ -37,11 +37,6 @@ def load_bars(persisted_path, song_name):
     bars = np.load(persisted_path + "bars\\" + song_name + ".npy")
     return bars
 
-# def old_load_spectrogram_and_bars(persisted_path, song_name, feature, hop_length):
-#     bars = np.load(persisted_path + "bars\\" + song_name + ".npy")
-#     spectrogram = np.load(persisted_path + "spectrograms\\" + song_name + "_" + feature + str(hop_length) + ".npy")
-#     return bars, spectrogram
-
 def load_spectrogram_and_bars(persisted_path, song_name, feature, hop_length, fmin = 98):
     """
     Load the spectrogram and the bars for this song, which were persisted after a first computation.

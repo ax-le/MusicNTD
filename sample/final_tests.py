@@ -328,7 +328,6 @@ def results_on_signal_without_lambda(dataset, annotations_type = "MIREX10", subd
     """
     Segmentation results on the autosimilarity of the signal without penalty function.
     """
-    #dataset = "C:\\Users\\amarmore\\Desktop\\Audio samples\\RWC Pop\\Entire RWC"
     persisted_path = default_persisted_path
     annotations_folder = "{}\\{}\\".format(annotations_folder_path, annotations_type)
     paths = scr.load_RWC_dataset(dataset, annotations_type)

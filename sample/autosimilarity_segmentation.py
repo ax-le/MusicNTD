@@ -21,7 +21,7 @@ def get_autosimilarity(an_array, transpose = False, normalize = False):
     Parameters
     ----------
     an_array : numpy array
-        The array/matrix seen as array which autosimilarity os to compute.
+        The array/matrix seen as array which autosimilarity is to compute.
     transpose : boolean, optional
         Whether the array has to be transpose for computing the autosimilarity.
         The default is False.
@@ -330,7 +330,7 @@ def compute_all_kernels(max_size):
 #             if convolution_type == "full":
 #                 # Full kernel (except for the diagonal)
 #                 kern = np.ones((p,p)) - np.identity(p)
-#             elif convolution_type == "four_bands":
+#             elif convolution_type == "eight_bands":
 #                 k = np.array([np.ones(p-4),np.ones(p-3),np.ones(p-2),np.ones(p-1),np.zeros(p),np.ones(p-1),np.ones(p-2),np.ones(p-3),np.ones(p-4)])
 #                 offset = [-4,-3,-2,-1,0,1,2,3,4]
 #                 # kern = np.ones((p,p)) - np.identity(p) + diags(k,offset).toarray()
@@ -364,21 +364,9 @@ def convolutionnal_cost(cropped_autosimilarity, kernels):
 
     """
     p = len(cropped_autosimilarity)
-    # kern = np.ones((p,p)) - np.identity(p)
-    # # if p < 4:
-    # #     kern = np.ones((p,p)) - np.identity(p)
-    # #     # n = p
-    # # else:
-    # #     k = np.array([np.ones(p-4),np.ones(p-3),np.ones(p-2),np.ones(p-1),np.zeros(p),np.ones(p-1),np.ones(p-2),np.ones(p-3),np.ones(p-4)])
-    # #     # n = 0
-    # #     # for i in k:
-    # #     #     n += i.shape[0]
-    # #     offset = [-4,-3,-2,-1,0,1,2,3,4]
-    # #     #kern = np.ones((p,p)) - np.identity(p) + diags(k,offset).toarray()
-    # #     kern = diags(k,offset).toarray()
     kern = kernels[p]
-    # #return np.mean(np.multiply(kern,cropped_autosimilarity))"""
-    return np.sum(np.multiply(kern,cropped_autosimilarity)) * 2 / p**2
+    # return np.mean(np.multiply(kern,cropped_autosimilarity))"""
+    return np.sum(np.multiply(kern,cropped_autosimilarity)) / p**2
 
 
 # %% Running on entire autosimilairty
@@ -481,7 +469,7 @@ def dynamic_convolution_computation(autosimilarity, mix = 1, min_size = 1, max_s
     Raises
     ------
     NotImplementedError
-        DESCRIPTION.
+        If unfitted data, see specific errors.
 
     Returns
     -------
@@ -554,7 +542,7 @@ def penalty_cost_from_arg(penalty_func, segment_length):
     ----------
     penalty_func : string
         Identifier of the penalty function.
-    segment_length : TYPE
+    segment_length : integer
         Size of the segment.
 
     Returns
