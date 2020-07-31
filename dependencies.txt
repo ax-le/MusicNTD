@@ -1,0 +1,7 @@
+ - librosa
+ - madmom
+ - mir_eval
+ - numpy
+ - pandas (for tables in the notebooks, not used otehrwise).
+ - soundfile
+ - tensorly
