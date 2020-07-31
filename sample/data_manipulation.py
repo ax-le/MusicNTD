@@ -69,7 +69,7 @@ def get_bars_from_audio(song):
 
     Returns
     -------
-    downbeats_times : list of tuple of float
+    bars : list of tuple of float
         List of the estimated bars, as (start, end) times.
         
     References
@@ -230,7 +230,7 @@ def segments_from_time_to_frame_idx(segments, hop_length_seconds):
     
 def frontiers_from_time_to_bar(seq, bars):
     """
-    Convert the frontiers in time to a bar index.
+    Converts the frontiers in time to a bar index.
     The selected bar is the one which end is the closest from the frontier.
 
     Parameters

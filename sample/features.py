@@ -75,33 +75,9 @@ def get_spectrogram(signal, sr, feature, hop_length, n_fft = 2048, fmin = 98):
         audio_harmonic, _ = librosa.effects.hpss(y=np.asfortranarray(signal))
         chroma_stft = librosa.feature.chroma_stft(y=audio_harmonic, sr=sr, n_fft = n_fft, hop_length=hop_length)
         return chroma_stft
-    elif feature.lower() == "old_pcp":
-        nb_octaves = 6
-        bins_per_octave = 12
-        n_bins = nb_octaves * bins_per_octave
-        if len(signal.shape) == 1:
-
-            audio_harmonic, _ = librosa.effects.hpss(y=np.asfortranarray(signal))
-            pcp_cqt = np.abs(librosa.core.hybrid_cqt(audio_harmonic,sr=sr,hop_length=hop_length,
-                                                n_bins=n_bins,norm=np.inf,fmin=fmin)) ** 2
-            return librosa.feature.chroma_cqt(C=pcp_cqt,sr=sr,hop_length=hop_length,
-                                              n_octaves=nb_octaves,fmin=fmin)
-        else:
-            audio_harmonic, _ = librosa.effects.hpss(y=np.asfortranarray(signal[:,0]))
-            pcp_cqt = np.abs(librosa.core.hybrid_cqt(audio_harmonic,sr=sr,hop_length=hop_length,
-                                                n_bins=n_bins,norm=np.inf,fmin=fmin)) ** 2
-            pcp = librosa.feature.chroma_cqt(C=pcp_cqt,sr=sr,hop_length=hop_length,
-                                              n_octaves=nb_octaves,fmin=fmin)
-            for i in range(1,signal.shape[1]):
-                audio_harmonic, _ = librosa.effects.hpss(y=np.asfortranarray(signal[:,i]))
-                pcp_cqt = np.abs(librosa.core.hybrid_cqt(audio_harmonic,sr=sr,hop_length=hop_length,
-                                                    n_bins=n_bins,norm=np.inf,fmin=fmin)) ** 2
-                pcp += librosa.feature.chroma_cqt(C=pcp_cqt,sr=sr,hop_length=hop_length,
-                                                  n_octaves=nb_octaves,fmin=fmin)
-            return pcp
     elif feature == "pcp":
-        norm=inf # Normalisation des colonnes
-        win_len_smooth=82 # Taille de la fenêtre de lissage
+        norm=inf # Normalization of columns
+        win_len_smooth=82 # Size of the smoothing window
         
         n_octaves=6
         bins_per_chroma = 3

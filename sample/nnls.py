@@ -111,11 +111,6 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
     [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
-
-    [2] J. Eggert, and E. Korner. "Sparse coding and NMF."
-    2004 IEEE International Joint Conference on Neural Networks
-    (IEEE Cat. No. 04CH37541). Vol. 4. IEEE, 2004.
-
     """
     if len(UtM.shape) == 1:
         raise err.ArgumentException("Incorrect shape for UtM, you could use reshape(<shape>, 1) to correct this problem if UtM is a vector.")

@@ -18,6 +18,7 @@ import errors as err
 
 # TODO: Normalization on the core tensor is only possible for the last mode (our use case).
 # To make dependant of a parameter and available for every mode.
+# Note: TODO after submission tag, as it could modify the behavior of the algorithm.
 
 def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=100, tol=1e-6,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], hals = False,
