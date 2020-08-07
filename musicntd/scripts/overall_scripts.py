@@ -7,20 +7,93 @@ Created on Wed Mar  4 17:34:39 2020
 
 # A module containing some high-level scripts for decomposition and/or segmentation.
 
-import context
-import data_manipulation as dm
-import tensor_factory as tf
-import autosimilarity_segmentation as as_seg
+import soundfile as sf
+import librosa
 import tensorly as tl
-from current_plot import *
-import NTD
 import os
 import numpy as np
 import pathlib
 
+import nn_fac.ntd as NTD
+
+import musicntd.autosimilarity_segmentation as as_seg
+import musicntd.data_manipulation as dm
+import musicntd.model.features as features
+import musicntd.model.errors as err
+from musicntd.model.current_plot import *
+
+def load_RWC_dataset(music_folder_path, annotations_type = "MIREX10", desired_format = None, downbeats = None):
+    """
+    Load the data on the RWC dataset, ie path of songs and annotations.
+    The annotations can be either AIST or MIREX 10.
+
+    Parameters
+    ----------
+    music_folder_path : String
+        Path of the folder to parse.
+    annotations_type : "AIST" [1] or "MIREX10" [2]
+        The type of annotations to load (both have a specific behavior and formatting)
+        The default is "MIREX10"
+    desired_format : DEPRECATED
+    downbeats : DEPRECATED
+
+    Raises
+    ------
+    NotImplementedError
+        If the format is not taken in account.
+
+    Returns
+    -------
+    numpy array
+        list of list of paths, each sublist being of the form [song, annotations, downbeat(if specified)].
+        
+    References
+    ----------
+    [1] Goto, M. (2006, October). AIST Annotation for the RWC Music Database. In ISMIR (pp. 359-360).
+    
+    [2] Bimbot, F., Sargent, G., Deruty, E., Guichaoua, C., & Vincent, E. (2014, January). 
+    Semiotic description of music structure: An introduction to the Quaero/Metiss structural annotations.
+
+    """
+    if downbeats != None or desired_format != None:
+        raise err.OutdatedBehaviorException("This version of loading is deprecated.")
+    # Load dataset paths at the format "song, annotations, downbeats"
+    paths = []
+    for file in os.listdir(music_folder_path):
+        if file[-4:] == ".wav":
+            file_number = "{:03d}".format(int(file[:-4]))
+            ann = dm.get_annotation_name_from_song(file_number, annotations_type)
+            paths.append([file, ann])
+    return np.array(paths)
+
+# %% Loading or persisting bars, spectrograms and NTD computation
+def load_or_save_bars(persisted_path, song_path):
+    """
+    Computes the bars for this song, or load them if they were already computed.
+
+    Parameters
+    ----------
+    persisted_path : string
+        Path where the bars should be found.
+    song_path : string
+        The path of the signal of the song.
+
+    Returns
+    -------
+    bars : list of tuple of floats
+        The persisted bars for this song.
+    """
+    song_name = song_path.split("\\")[-1].replace(".wav","")
+    try:
+        bars = np.load("{}\\bars\\{}.npy".format(persisted_path, song_name))
+    except:
+        bars = dm.get_bars_from_audio(song_path)
+        np.save("{}\\bars\\{}".format(persisted_path, song_name), bars)
+    return bars
+
 def load_bars(persisted_path, song_name):
     """
-    Load the bars for this song, which were persisted after a first computation.
+    Loads the bars for this song, which were persisted after a first computation.
 
     Parameters
     ----------
@@ -34,17 +107,92 @@ def load_bars(persisted_path, song_name):
     bars : list of tuple of floats
         The persisted bars for this song.
     """
-    bars = np.load(persisted_path + "bars\\" + song_name + ".npy")
+    raise err.OutdatedBehaviorException("You should use load_or_save_bars(persisted_path, song_path) instead, as it handle the fact that bars weren't computed yet.")
+    bars = np.load("{}\\bars\\{}.npy".format(persisted_path, song_name))
     return bars
-
-def load_spectrogram_and_bars(persisted_path, song_name, feature, hop_length, fmin = 98):
+    
+def load_or_save_spectrogram(persisted_path, song_path, feature, hop_length, fmin = 98):
     """
-    Load the spectrogram and the bars for this song, which were persisted after a first computation.
+    Computes the spectrogram for this song, or load it if it were already computed.
 
     Parameters
     ----------
     persisted_path : string
-        Path where the bars and the spectrograms should be found.
+        Path where the spectrogram should be found.
+    song_path : string
+        The path of the signal of the song.
+    feature : string
+        Feature of the spectrogram, part of the identifier of the spectrogram.
+    hop_length : integer
+        hop_length of the spectrogram, part of the identifier of the spectrogram.
+    fmin : integer
+        Minimal frequence for the spectrogram, part of the identifier of the spectrogram.
+        The default is 98.
+
+    Returns
+    -------=
+    spectrogram : numpy array
+        The pre-computed spectorgram.
+    """
+    song_name = song_path.split("\\")[-1].replace(".wav","")
+    try:
+        spectrogram = np.load("{}\\spectrograms\\{}_{}_stereo_{}_{}.npy".format(persisted_path, song_name, feature, hop_length, fmin))
+    except:
+        the_signal, original_sampling_rate = sf.read(song_path)
+        if original_sampling_rate != 44100:
+            the_signal = librosa.core.resample(np.asfortranarray(the_signal), original_sampling_rate, 44100)
+        if feature == "tonnetz":
+            hop_length = "fixed"
+            fmin = "fixed"
+        if feature == "pcp_tonnetz":
+            # If chromas are already computed, try to load them instead of recomputing them.
+            chromas = load_or_save_spectrogram(persisted_path, song_path, "pcp", hop_length, fmin = fmin)
+            spectrogram = librosa.feature.tonnetz(y=None, sr = None, chroma = chromas)
+            np.save("{}\\spectrograms\\{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin), spectrogram)
+            return spectrogram
+        # If it wasn't pcp_tonnetz, compute the spectrogram, and then save it.
+        spectrogram = features.get_spectrogram(the_signal, 44100, feature, hop_length, fmin = fmin)
+        np.save("{}\\spectrograms\\{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin), spectrogram)
+    return spectrogram
+
+def load_or_save_spectrogram_and_bars(persisted_path, song_path, feature, hop_length, fmin = 98):
+    """
+    Loads the spectrogram and the bars for this song, which were persisted after a first computation.
+
+    Parameters
+    ----------
+    persisted_path : string
+        Path where the bars and the spectrogram should be found.
+    song_path : string
+        The path of the signal of the song.
+    feature : string
+        Feature of the spectrogram, part of the identifier of the spectrogram.
+    hop_length : integer
+        hop_length of the spectrogram, part of the identifier of the spectrogram.
+    fmin : integer
+        Minimal frequence for the spectrogram, part of the identifier of the spectrogram.
+        The default is 98.
+
+    Returns
+    -------
+    bars : list of tuple of floats
+        The persisted bars for this song.
+    spectrogram : numpy array
+        The pre-computed spectorgram.
+    """
+    bars = load_or_save_bars(persisted_path, song_path)
+    spectrogram = load_or_save_spectrogram(persisted_path, song_path, feature, hop_length, fmin = fmin)
+    return bars, spectrogram
+
+
+def load_spectrogram_and_bars(persisted_path, song_name, feature, hop_length, fmin = 98):
+    """
+    Loads the spectrogram and the bars for this song, which were persisted after a first computation.
+
+    Parameters
+    ----------
+    persisted_path : string
+        Path where the bars and the spectrogram should be found.
     song_name : string
         Name of the song (identifier of the bars to load).
     feature : string
@@ -62,38 +210,72 @@ def load_spectrogram_and_bars(persisted_path, song_name, feature, hop_length, fm
     spectrogram : numpy array
         The pre-computed spectorgram.
     """
-    bars = np.load(persisted_path + "bars\\" + song_name + ".npy")
-    spectrogram = np.load(persisted_path + "spectrograms\\{}_{}_stereo_{}_{}.npy".format(song_name, feature, hop_length, fmin))
+    raise err.OutdatedBehaviorException("You should use load_or_save_spectrogram_and_bars(persisted_path, song_path, feature, hop_length, fmin) instead, as it handle the fact that bars weren't computed yet.")
+    bars = np.load("{}\\bars\\{}.npy".format(persisted_path, song_name))
+    spectrogram = np.load("{}\\spectrograms\\{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin))
     return bars, spectrogram
 
-def load_tensor_spectrogram_and_bars(persisted_path, song_name, feature, hop_length, subdivision):
+def NTD_decomp_as_script(persisted_path, persisted_arguments, tensor_spectrogram, ranks, init = "chromas"): 
     """
-    Load the tensor_spectrogram and the bars for this song, which were persisted after a first computation.
+    Computes the NTD from the tensor_spectrogram and with specified ranks.
+    On the first hand, if the NTD is persisted, it will load and return its results.
+    If it's not, it will compute the NTD, store it, and return it.
 
     Parameters
     ----------
-    persisted_path : string
-        Path where the bars and the spectrorams should be found.
-    song_name : string
-        Name of the song (identifier of the bars to load).
-    feature : string
-        Feature of the tensor_spectrogram, part of the identifier of the tensor_spectrogram.
-    hop_length : integer
-        hop_length of the tensor_spectrogram, part of the identifier of the tensor_spectrogram.
-    subdivision : integer
-        Subdivision for the tensor_spectrogram, part of the identifier of the tensor_spectrogram.
-        The default is 98.
+    persisted_path : String
+        Path of the persisted decompositions and bars.
+    persisted_arguments : String
+        Identifier of the specific NTD to load/save.
+    tensor_spectrogram : tensorly tensor
+        The tensor to decompose.
+    ranks : list of integers
+        Ranks of the decomposition.
+    init : String, optional
+        The type of initialization of the NTD.
+        See the NTD module to have more information regarding initialization.
+        The default is "chromas",
+        meaning that the first factor will be set to the 12-size identity matrix,
+        and the other factors will be initialized by HOSVD.
+
+    Raises
+    ------
+    NotImplementedError
+        Errors in the arguments.
 
     Returns
     -------
-    bars : list of tuple of floats
-        The persisted bars for this song.
-    tensor_spectrogram : tensorly tensor
-        The pre-computed tensor_spectorgram.
+    core : tensorly tensor
+        The core of the decomposition.
+    factors : numpy array
+        The factors of the decomposition.
+
     """
-    bars = np.load(persisted_path + "bars\\" + song_name + ".npy")
-    tensor_spectrogram = np.load(persisted_path + "tensor_spectrograms\\{}_{}_stereo_{}.npy".format(song_name, feature, subdivision))
-    return bars, tensor_spectrogram
+    path_for_ntd = "{}\\ntd\\{}_{}_{}".format(persisted_path, ranks[0], ranks[1], ranks[2])
+    if "512" in persisted_arguments:
+        raise NotImplementedError("Probably an error in the code, as old hop_length seems to be passed")
+    if persisted_arguments[-2:] == "32":
+        raise NotImplementedError("Probably an error in the code, as the hop_length seems to be passed")
+    try:
+        a_core_path = "{}\\core{}.npy".format(path_for_ntd, persisted_arguments)
+        a_core = np.load(a_core_path)
+        a_factor_path = "{}\\factors{}.npy".format(path_for_ntd, persisted_arguments)
+        a_factor = np.load(a_factor_path, allow_pickle=True)
+        return a_core, a_factor
+    except FileNotFoundError:
+        core, factors = NTD.ntd(tensor_spectrogram, ranks = ranks, init = init, verbose = False, hals = False,
+                            sparsity_coefficients = [None, None, None, None], normalize = [True, True, False, True], mode_core_norm = 2,
+                            deterministic = True)
+        
+        pathlib.Path(path_for_ntd).mkdir(parents=True, exist_ok=True)
+    
+        core_path = "{}\\core{}".format(path_for_ntd, persisted_arguments)
+        np.save(core_path, core)
+        factors_path = "{}\\factors{}".format(path_for_ntd, persisted_arguments)
+        np.save(factors_path, factors)
+        return core, factors
+
+# %% Outdated and deprecated functions
 
 def run_results_on_signal(tensor_spectrogram, reference_segments, bars, plotting = True):
     """
@@ -123,58 +305,6 @@ def run_results_on_signal(tensor_spectrogram, reference_segments, bars, plotting
         plot_spec_with_annotations_abs_ord(as_seg.get_autosimilarity(unfolded, transpose = True, normalize = True), dm.frontiers_from_time_to_bar(dm.segments_to_frontiers(reference_segments), bars), cmap = cm.Greys)
 
     return compute_all_results(unfolded, reference_segments, bars, window_length = 0.5), compute_all_results(unfolded, reference_segments, bars, window_length = 3)
-
-def loop_NTD_on_ranks(persisted_path, persisted_arguments, tensor_spectrogram, ranks_rhythm, ranks_pattern, reference_segments, bars, init = "tucker", measure = "expanding_convolution", plotting = True):
-    """
-    Script to compute several NTD, with different ranks.
-
-    Parameters
-    ----------
-    persisted_path : String
-        Path of the persisted decompositions and bars.
-    persisted_arguments : String
-        Identifier of the specific NTD to load/save.
-    tensor_spectrogram : tensorly tensor
-        The tensor to decompose.
-    ranks_rhythm : list of integers
-        Ranks for the second factor (H).
-    ranks_pattern : list of integers
-        Ranks for the third factor (Q).
-    reference_segments : list of tuple of floats
-        Annotated segments.
-    bars : list of tuple of floats
-        Bars of the songs.
-    init : String, optional
-        The type of initialization of the NTD.
-        See the NTD module to have more information regarding initialization.
-        The default is "tucker",
-        meaning that the factors will be initialized by HOSVD.
-    measure : string, optional
-        Specific measure for the segmentation/cost for the dynamic programming algorithm.
-        The default is "expanding_convolution".
-    plotting : boolean, optional
-        DESCRIPTION. The default is True.
-
-    Returns
-    -------
-    several_NTD : list of tuple (core, factors), which are array of each NTD for different factors.
-        Results of the different runs of NTD, with the different ranks.
-
-    """
-    several_NTD = []
-    for rank_rhythm in ranks_rhythm:
-        for rank_pattern in ranks_pattern:
-            core, factors = NTD_decomp_as_script(persisted_path, persisted_arguments, tensor_spectrogram, [12, rank_rhythm, rank_pattern], init = init)
-
-            if plotting:
-                print("Rang H (rythmique): " + str(rank_rhythm) + ", rang Q (patterns): " + str(rank_pattern))
-                plot_spec_with_annotations_abs_ord(as_seg.get_autosimilarity(factors[2], transpose = True, normalize = True), dm.frontiers_from_time_to_bar(dm.segments_to_frontiers(reference_segments), bars), cmap = cm.Greys)
-            
-            conv_segments_on_normalized = segmentation_from_c_factor(factors[2], normalize_autosimil=True, segmentation=measure)
-            conv_segments_on_normalized_in_time = dm.segments_from_bar_to_time(conv_segments_on_normalized, bars)
-            several_NTD.append(dm.compute_score_of_segmentation(reference_segments, conv_segments_on_normalized_in_time, window_length=0.5))
-
-    return several_NTD
 
 def run_NTD_on_this_song(persisted_path, persisted_arguments, tensor_spectrogram, ranks, reference_segments, bars, init = "tucker", plotting = True):
     """
@@ -215,66 +345,6 @@ def run_NTD_on_this_song(persisted_path, persisted_arguments, tensor_spectrogram
         plot_spec_with_annotations_abs_ord(as_seg.get_autosimilarity(factors[2], transpose = True, normalize = True), dm.frontiers_from_time_to_bar(dm.segments_to_frontiers(reference_segments), bars), cmap = cm.Greys)
 
     return compute_all_results(factors[2], reference_segments, bars, window_length = 0.5), compute_all_results(factors[2], reference_segments, bars, window_length = 3)
-
-def NTD_decomp_as_script(persisted_path, persisted_arguments, tensor_spectrogram, ranks, init = "chromas"): 
-    """
-    Computes the NTD from the tensor_spectrogram and with specified ranks.
-    On the first hand, if the NTD is persisted, it will load and return its results.
-    If it's not, it will compute the NTD, store it, and return it.
-
-    Parameters
-    ----------
-    persisted_path : String
-        Path of the persisted decompositions and bars.
-    persisted_arguments : String
-        Identifier of the specific NTD to load/save.
-    tensor_spectrogram : tensorly tensor
-        The tensor to decompose.
-    ranks : list of integers
-        Ranks of the decomposition.
-    init : String, optional
-        The type of initialization of the NTD.
-        See the NTD module to have more information regarding initialization.
-        The default is "chromas",
-        meaning that the first factor will be set to the 12-size identity matrix,
-        and the other factors will be initialized by HOSVD.
-
-    Raises
-    ------
-    NotImplementedError
-        Errors in the arguments.
-
-    Returns
-    -------
-    core : tensorly tensor
-        The core of the decomposition.
-    factors : numpy array
-        The factors of the decomposition.
-
-    """
-    path_for_ntd = persisted_path + "ntd\\{}_{}_{}\\".format(ranks[0], ranks[1], ranks[2])
-    if "512" in persisted_arguments:
-        raise NotImplementedError("Probably an error in the code, as old hop_length seems to be passed")
-    if persisted_arguments[-2:] == "32":
-        raise NotImplementedError("Probably an error in the code, as the hop_length seems to be passed")
-    try:
-        a_core_path = path_for_ntd + "core" + persisted_arguments + ".npy"
-        a_core = np.load(a_core_path)
-        a_factor_path = path_for_ntd + "factors" + persisted_arguments + ".npy"
-        a_factor = np.load(a_factor_path, allow_pickle=True)
-        return a_core, a_factor
-    except FileNotFoundError:
-        core, factors = NTD.ntd(tensor_spectrogram, ranks = ranks, init = init, verbose = False, hals = False,
-                            sparsity_coefficients = [None, None, None, None], normalize = [True, True, False, True],
-                            deterministic = True)
-        
-        pathlib.Path(path_for_ntd).mkdir(parents=True, exist_ok=True)
-    
-        core_path = path_for_ntd + "core" + persisted_arguments
-        np.save(core_path, core)
-        factors_path = path_for_ntd + "factors" + persisted_arguments
-        np.save(factors_path, factors)
-        return core, factors
 
 def segmentation_from_c_factor(c_factor, normalize_autosimil = False, segmentation = "expanding_mixed"):
     """
@@ -411,48 +481,53 @@ def compute_all_results(c_factor, references_segments, bars, window_length = 0.5
     all_res.append(dm.compute_score_of_segmentation(references_segments, conv_and_novelty_segments_on_normalized_in_time, window_length=window_length))
     
     return all_res
+      
+# def old_and_for_midi_load_RWC_dataset(folder_path, desired_format = "wav", downbeats = True):
+#     """
+#     Load the data on the RWC dataset, ie path of songs and annotations.
 
-def load_RWC_dataset(music_folder_path, annotations_type = "MIREX10", desired_format = None, downbeats = None):
-    """
-    Load the data on the RWC dataset, ie path of songs and annotations.
-    The annotations can be either AIST or MIREX 10.
+#     Parameters
+#     ----------
+#     folder_path : String
+#         Path of the folder to parse.
+#     desired_format : String, optional
+#         The format of song files to study.
+#         The default is "wav".
+#     downbeats : boolean, optional
+#         Whether to list the paths of downbeats or not.
+#         The default is True.
 
-    Parameters
-    ----------
-    music_folder_path : String
-        Path of the folder to parse.
-    annotations_type : "AIST" [1] or "MIREX10" [2]
-        The type of annotations to load (both have a specific behavior and formatting)
-        The default is "MIREX10"
-    desired_format : DEPRECATED
-    downbeats : DEPRECATED
+#     Raises
+#     ------
+#     NotImplementedError
+#         If the format is not taken in account.
 
-    Raises
-    ------
-    NotImplementedError
-        If the format is not taken in account.
+#     Returns
+#     -------
+#     numpy array
+#         list of list of paths, each sublist being of the form [song, annotations, downbeat(if specified)].
 
-    Returns
-    -------
-    numpy array
-        list of list of paths, each sublist being of the form [song, annotations, downbeat(if specified)].
-        
-    References
-    ----------
-    [1] Goto, M. (2006, October). AIST Annotation for the RWC Music Database. In ISMIR (pp. 359-360).
-    
-    [2] Bimbot, F., Sargent, G., Deruty, E., Guichaoua, C., & Vincent, E. (2014, January). 
-    Semiotic description of music structure: An introduction to the Quaero/Metiss structural annotations.
-
-    """
-    if downbeats != None or desired_format != None:
-        raise NotImplementedError("This version of loading is deprecated, try old_load_RWC_dataset() instead")
-    # Load dataset paths at the format "song, annotations, downbeats"
-    paths = []
-    for file in os.listdir(music_folder_path):
-        if file[-4:] == ".wav":
-            file_number = "{:03d}".format(int(file[:-4]))
-            ann = dm.get_annotation_name_from_song(file_number, annotations_type)
-            paths.append([file, ann])
-    return np.array(paths)
-    
+#     """
+#     # Load dataset paths at the format "song, annotations, downbeats"
+#     paths = []
+#     if desired_format == "mid":
+#         for file in os.listdir(folder_path):
+#             if file[-4:] == ".mid":
+#                 if downbeats == True:
+#                     paths.append([file, file.replace("mid", "chorus.txt").upper(), file.replace("mid", "beat.txt").upper()])
+#                 else:
+#                     paths.append([file, file.replace("mid", "chorus.txt").upper()])
+#         return np.array(paths)
+#     elif desired_format == "wav":
+#         for file in os.listdir(folder_path):
+#             if file[-4:] == ".wav":
+#                 file_number = "{:03d}".format(int(file[:-4]))
+#                 annotations_prefix = "RM-P"
+#                 if downbeats == True:
+#                     paths.append([file, annotations_prefix + file_number + (".chorus.txt").upper(), annotations_prefix + file_number + (".beat.txt").upper()])
+#                 else:
+#                     paths.append([file, annotations_prefix + file_number + (".chorus.txt").upper()])
+#         return np.array(paths)
+#     else:
+#         raise NotImplementedError("Unknown format.")
+       

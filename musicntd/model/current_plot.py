@@ -7,8 +7,6 @@ Created on Fri Feb 22 16:29:17 2019
 
 # Defining current plotting functions.
 
-import context
-
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -83,12 +81,12 @@ def plot_permuted_tucker(factors, core, cmap = cm.Greys, plot_core = True):
                          x_axis = "Atoms", y_axis = "Pitch-class Index", cmap = cmap)
     h_permut = permutate_factor(factors[1])
     plot_me_this_spectrogram(factors[1].T[h_permut], title = "H matrix: time at barscale (rythmic content)",
-                             x_axis = "Position in the bar (in frame indexes)", y_axis = "Atoms\n(permuted for visualization purpose)", 
-                             figsize=(factors[1].shape[0]/4,factors[1].shape[1]/4), cmap = cmap)
+                             x_axis = "Position in the bar\n(in frame indexes)", y_axis = "Atoms\n(permuted for\nvisualization purpose)", 
+                             figsize=(factors[1].shape[0]/10,factors[1].shape[1]/10), cmap = cmap)
     q_permut = permutate_factor(factors[2])
     plot_me_this_spectrogram(factors[2].T[q_permut], title = "Q matrix: Bar content feature",
-                             x_axis = "Index of the bar", y_axis = "Musical pattern index\n(permuted for visualization purpose)", 
-                             figsize=(factors[2].shape[0]/4,factors[2].shape[1]/4), cmap = cmap)
+                             x_axis = "Index of the bar", y_axis = "Musical pattern index\n(permuted for\nvisualization purpose)", 
+                             figsize=(factors[2].shape[0]/10,factors[2].shape[1]/10), cmap = cmap)
     if plot_core:
         for i, idx in enumerate(q_permut):
             plot_me_this_spectrogram(core[:,h_permut,idx], title = "Core, slice {} (slice {} in original decomposition order)".format(i, idx), x_axis = "Time atoms", y_axis = "Freq Atoms", cmap = cm.Greys)
@@ -173,7 +171,7 @@ def plot_spec_with_annotations(factor, annotations, color = "yellow", title = No
     Plots a spectrogram with the segmentation annotation.
     """
     if factor.shape[0] == factor.shape[1]:
-        plt.figure(figsize=(9,9))
+        plt.figure(figsize=(7,7))
     plt.title(title)
     padded_fac = pad_factor(factor)
     plt.pcolormesh(np.arange(padded_fac.shape[1]), np.arange(padded_fac.shape[0]), padded_fac, cmap=cm.Greys)
@@ -203,9 +201,6 @@ def plot_spec_with_annotations_and_prediction(factor, annotations, predicted_end
     """
     if factor.shape[0] == factor.shape[1]:
         plt.figure(figsize=(7,7))
-    else:
-        plt.figure(figsize=(factor.shape[1]/4,factor.shape[0]/4))
-
     plt.title(title)
     padded_fac = pad_factor(factor)
     plt.pcolormesh(np.arange(padded_fac.shape[1]), np.arange(padded_fac.shape[0]), padded_fac, cmap=cm.Greys)

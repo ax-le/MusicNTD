@@ -8,8 +8,6 @@ Created on Fri Feb 21 15:09:10 2020
 # A file which contains all code regarding conversion of data, or extracting information from it
 # (typically getting the bars, converting segments in frontiers, sonifying segmentation or computing its score).
 
-import context
-
 import numpy as np
 import math
 import madmom.io.midi as midi_handler
@@ -17,6 +15,8 @@ import madmom.features.downbeats as dbt
 import soundfile as sf
 import mir_eval
 import scipy
+
+import musicntd.model.errors as err
 
 # %% Read and treat inputs
 def get_piano_roll(path, hop_length_seconds, threshold_offset = None):
@@ -69,7 +69,7 @@ def get_bars_from_audio(song):
 
     Returns
     -------
-    bars : list of tuple of float
+    downbeats_times : list of tuple of float
         List of the estimated bars, as (start, end) times.
         
     References
@@ -90,7 +90,7 @@ def get_bars_from_audio(song):
             downbeats_times.append(beat[0])
     mean_bar = np.mean([downbeats_times[i + 1] - downbeats_times[i] for i in range(len(downbeats_times) - 1)])
     signal_length = act.shape[0]/100
-    while downbeats_times[-1] + mean_bar < 1.1 * signal_length:
+    while downbeats_times[-1] + 1.1*mean_bar < signal_length:
         downbeats_times.append(round(downbeats_times[-1] + mean_bar, 2))
     downbeats_times.append(signal_length)
     return frontiers_to_segments(downbeats_times)
@@ -141,7 +141,7 @@ def get_segmentation_from_txt(path, annotations_type):
         elif annotations_type == "MIREX10":
             segments.append((round(float(tupl[0]), 3), round(float(tupl[1]), 3), idx))
         else:
-            raise NotImplementedError("Annotations type not understood")
+            raise err.InvalidArgumentValueException("Annotations type not understood")
     return segments
 
 def get_annotation_name_from_song(song_number, annotations_type):
@@ -162,7 +162,7 @@ def get_annotation_name_from_song(song_number, annotations_type):
 
     Raises
     ------
-    NotImplementedError
+    InvalidArgumentValueException
         If the annotatipn type is not implemented.
 
     Returns
@@ -183,7 +183,7 @@ def get_annotation_name_from_song(song_number, annotations_type):
     elif annotations_type == "AIST":
         return "RM-P{:03d}.CHORUS.TXT".format(int(song_number))
     else:
-        raise NotImplementedError("Annotations type not understood")
+        raise err.InvalidArgumentValueException("Annotations type not understood")
 
 # %% Conversion of data (time/frame/beat and segment/frontiers)
 def frontiers_from_time_to_frame_idx(seq, hop_length_seconds):
@@ -227,10 +227,10 @@ def segments_from_time_to_frame_idx(segments, hop_length_seconds):
         if bar_in_frames[0] != bar_in_frames[1]:
             to_return.append(bar_in_frames)
     return to_return
-    
+
 def frontiers_from_time_to_bar(seq, bars):
     """
-    Converts the frontiers in time to a bar index.
+    Convert the frontiers in time to a bar index.
     The selected bar is the one which end is the closest from the frontier.
 
     Parameters
@@ -255,7 +255,6 @@ def frontiers_from_time_to_bar(seq, bars):
                 else:
                     if idx == 0:
                         seq_barwise.append(idx)
-                        #raise NotImplementedError("The current frontier is labelled in the start silence, which is incorrect.")
                         #print("The current frontier {} is labelled in the start silence ({},{}), which is incorrect.".format(frontier, bar[0], bar[1]))
                     else:
                         seq_barwise.append(idx - 1)
@@ -286,6 +285,31 @@ def frontiers_from_bar_to_time(seq, bars):
         if bar_frontier not in to_return:
             to_return.append(bar_frontier)
     return to_return
+
+def segments_from_bar_to_time(segments, bars):
+    """
+    Converts segments from bar indexes to time.
+
+    Parameters
+    ----------
+    segments : list of tuple of integers
+        The indexes of the bars defining the segments (start, end).
+    bars : list of tuple of float
+        Bars, as tuples (start, end), in time.
+
+    Returns
+    -------
+    numpy array
+        Segments, in time.
+
+    """
+    to_return = []
+    for start, end in segments:
+        if end >= len(bars):
+            to_return.append([bars[start][1], bars[-1][1]])
+        else:
+            to_return.append([bars[start][1], bars[end][1]])
+    return np.array(to_return)
     
 def frontiers_to_segments(frontiers):
     """
@@ -326,31 +350,6 @@ def segments_to_frontiers(segments):
     """
     return [i[1] for i in segments]
 
-def segments_from_bar_to_time(segments, bars):
-    """
-    Converts segments from bar indexes to time.
-
-    Parameters
-    ----------
-    segments : list of tuple of integers
-        The indexes of the bars defining the segments (start, end).
-    bars : list of tuple of float
-        Bars, as tuples (start, end), in time.
-
-    Returns
-    -------
-    numpy array
-        Segments, in time.
-
-    """
-    to_return = []
-    for start, end in segments:
-        if end >= len(bars):
-            to_return.append([bars[start][1], bars[-1][1]])
-        else:
-            to_return.append([bars[start][1], bars[end][1]])
-    return np.array(to_return)
-
 def align_segments_on_bars(segments, bars):
     """
     Aligns the estimated segments to the closest bars (in time).
@@ -373,7 +372,7 @@ def align_segments_on_bars(segments, bars):
     """
     frontiers = segments_to_frontiers(segments)
     return frontiers_to_segments(align_frontiers_on_bars(frontiers, bars))
-    
+
 def align_frontiers_on_bars(frontiers, bars):
     """
     Aligns the frontiers of segments to the closest bars (in time).
@@ -455,12 +454,12 @@ def sonify_frontiers_song(song_signal, sampling_rate, frontiers_in_seconds, outp
     """
     frontiers_signal = mir_eval.sonify.clicks(frontiers_in_seconds, sampling_rate)
     
-    signal_with_frontiers = np.zeros(max(len(song_signal[:,0]), len(frontiers_signal)))
+    singal_with_frontiers = np.zeros(max(len(song_signal[:,0]), len(frontiers_signal)))
     
-    signal_with_frontiers[:len(song_signal[:,0])] = song_signal[:,0]
-    signal_with_frontiers[:len(frontiers_signal)] += frontiers_signal
+    singal_with_frontiers[:len(song_signal[:,0])] = song_signal[:,0]
+    singal_with_frontiers[:len(frontiers_signal)] += frontiers_signal
     
-    scipy.io.wavfile.write(output_path, sampling_rate, signal_with_frontiers)
+    scipy.io.wavfile.write(output_path, sampling_rate, singal_with_frontiers)
     
 # %% Score calculation encapsulation
 def compute_score_from_frontiers_in_bar(reference, frontiers_in_bar, bars, window = 0.5):
@@ -496,7 +495,7 @@ def compute_score_from_frontiers_in_bar(reference, frontiers_in_bar, bars, windo
     try:
         np.array(bars).shape[1]
     except:
-        raise NotImplementedError("Bug de passage a nouvelle version: bars est dbt (une liste), traquer et corriger erreur.")
+        raise err.OutdatedBehaviorException("Bars is still a list of downbeats, which is an old beavior, and shouldn't happen anymore. To track and to fix.")
     frontiers_in_time = frontiers_from_bar_to_time(frontiers_in_bar, bars)
     return compute_score_of_segmentation(reference, frontiers_to_segments(frontiers_in_time), window_length = window)
 
@@ -576,3 +575,5 @@ def compute_rates_of_segmentation(reference, segments_in_time, window_length = 0
     fp = int(round((tp * (1 - prec))/prec))
     fn = int(round((tp * (1 - rec))/rec))
     return tp, fp, fn
+        
+
