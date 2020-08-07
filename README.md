@@ -4,19 +4,21 @@ Hello, and welcome on this framework!
 
 This repository contains code used for the segmentation task of music using Nonnegative Tucker Decomposition (NTD).
 
-This is a first release, but is not a totally stable version yet. For example, automatic installation with pip or conda (non exhaustive) is not available yet, but will be in future versions.
+You can download it using pip, by typing:
 
-Comments are welcomed!
+    pip install musicntd
 
-## Software version ##
+Or download the source files and run the setup.py at the root of the folder.
 
-This code was developed under Anaconda "custom" version https://repo.anaconda.com/pkgs/main/win-64/anaconda-custom-py37_1.conda, with Python 3.7.6.
+Note that some Notebooks are included in the folder, along with their HTML (computed) version, in order to detail and present some experiments. By using pip, these Notebooks will be downloaded too, but may be hard to find if you're not used to search for the source files of the applications you install. In that sense, you should consider downloading the Notebooks folder manually. It will still work if you're using pip.
 
-Additional toolboxes can be found in the file dependencies.txt.
+The code containing the NTD algorithm is not in this project but in another one, called nn-fac, also available on pip and at this address: https://gitlab.inria.fr/amarmore/nonnegative-factorization.
+
+This project is still under development, and may contain bug. Comments are welcomed!
 
 ## Walkthrough Notebook ##
 
-A walkthrough notebook is available in the folder "Notebooks".
+A walkthrough Notebook, to present how to use NTD for music segmentation, is available in the folder "Notebooks".
 
 ## Credits ##
 

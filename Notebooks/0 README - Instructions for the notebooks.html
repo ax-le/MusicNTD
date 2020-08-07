@@ -13127,9 +13127,15 @@ div#notebook {
 <li>HTML, if you only need to read them,</li>
 <li>notebooks, if you want to reproduce the outputs.</li>
 </ul>
-<p>Be aware, if you're aiming at reproducing results, that notebooks weren't updated after computation, and some code in the first notebooks is already outdated at that time, so it might not work. If it's the case, please report me the problem at my mail adress: axel.marmoret_at_inria.fr.</p>
+<p>If you want to reproduce the results, you will need to download our code, which can be made by typing:</p>
+
+<pre><code>pip install musicntd
+
+</code></pre>
+<p>in a command shell, with pip installed ("Anaconda Prompt" for example on Windows).</p>
+<p>Be aware, if you're aiming at reproducing results, that the first notebook wasn't updated after computation, and some code is already outdated at that time, so it might not work. Other ones should work but, if not, please report me the problem at my mail adress: axel.marmoret_at_inria.fr.</p>
 <p>I will try to correct the problems in future versions.</p>
-<p>Another difficulty in reproductibility is that, due to heavy computational costs, NTD results and some deterministic tasks (for example, spectrogram computation) were persisted on my machine, so as to reuse the results and avoid recomputation. In that sense, "Path not found" errors could occur and, in that case too, feel free to advise me of them! Path are hard-coded in the file "hide_code.py".</p>
+<p>Another difficulty in reproductibility is that, due to heavy computational costs, NTD results and some deterministic tasks (for example, spectrogram computation) were persisted on my machine, so as to reuse the results and avoid recomputation. In that sense, "Path not found" errors could occur and, in that case too, feel free to advise me of them! Paths are hard-coded in the file "hide_code.py". In this spirit, you will need to create such a folder for saving results of computation, which is a huge time-saver.</p>
 
 </div>
 </div>
