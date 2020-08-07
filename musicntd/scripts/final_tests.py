@@ -258,11 +258,15 @@ def fixed_conditions_signal(dataset, penalty_param, annotations_type = "MIREX10"
         prec, rap, f_mes = dm.compute_score_of_segmentation(references_segments, segments_in_time, window_length = 3)
         three.append([tp,fp,fn,round(prec,4),round(rap,4),round(f_mes,4)])
             
-    dataframe = pd.DataFrame(np.array([np.mean(np.array(zero_five)[:,i]) for i in range(6)]), columns = ["Results with 0.5 seconds tolerance window{}".format(legend)], index=np.array(['True Positives','False Positives','False Negatives','Precision', 'Recall', 'F measure']))
+    final_res_sig_zero_five = np.array([np.mean(np.array(zero_five)[:,i]) for i in range(6)])
+    dataframe = pd.DataFrame(final_res_sig_zero_five, columns = ["Results with 0.5 seconds tolerance window{}".format(legend)], index=np.array(['True Positives','False Positives','False Negatives','Precision', 'Recall', 'F measure']))
     display(dataframe.T)
     
-    dataframe = pd.DataFrame(np.array([np.mean(np.array(three)[:,i]) for i in range(6)]), columns = ["Results with 3 seconds tolerance window{}".format(legend)], index=np.array(['True Positives','False Positives','False Negatives','Precision', 'Recall', 'F measure']))
+    final_res_sig_three = np.array([np.mean(np.array(three)[:,i]) for i in range(6)])
+    dataframe = pd.DataFrame(final_res_sig_three, columns = ["Results with 3 seconds tolerance window{}".format(legend)], index=np.array(['True Positives','False Positives','False Negatives','Precision', 'Recall', 'F measure']))
     display(dataframe.T)
+    
+    return final_res_sig_zero_five, final_res_sig_three
    
     
 def cross_validation_on_signal(learning_dataset, testing_dataset, penalty_range, annotations_type = "MIREX10", subdivision = 96, penalty_func = "modulo8", convolution_type = "eight_bands"):
@@ -319,6 +323,50 @@ def cross_validation_on_signal(learning_dataset, testing_dataset, penalty_range,
     
     display(pd.DataFrame(np.array([best_param]), index = ['Best lambda: ponderation parameter.'], columns = ["Learned parameter."]).T)
       
-    fixed_conditions_signal(testing_dataset, best_param, annotations_type = annotations_type, subdivision = subdivision, penalty_func = penalty_func, legend = ", on test dataset.", convolution_type = convolution_type)
+    final_res_sig_zero_five, final_res_sig_three = fixed_conditions_signal(testing_dataset, best_param, annotations_type = annotations_type, subdivision = subdivision, penalty_func = penalty_func, legend = ", on test dataset.", convolution_type = convolution_type)
     
-    return best_param
+    return final_res_sig_zero_five, final_res_sig_three
+
+
+def results_on_signal_without_lambda(dataset, annotations_type = "MIREX10", subdivision = 96, legend = " en conditions non précisées.", convolution_type = "eight_bands"):
+    """
+    Segmentation results on the autosimilarity of the signal without penalty function.
+    """
+    annotations_folder = "{}\\{}".format(annotations_folder_path, annotations_type)
+    paths = scr.load_RWC_dataset(dataset, annotations_type)
+    hop_length = 32
+    hop_length_seconds = 32/44100
+    zero_five_results = []
+    three_results = []
+    
+    for song_and_annotations in paths:
+        song_number = song_and_annotations[0].replace(".wav","")
+        
+        annot_path = "{}\\{}".format(annotations_folder, song_and_annotations[1])
+        annotations = dm.get_segmentation_from_txt(annot_path, annotations_type)
+        references_segments = np.array(annotations)[:, 0:2]
+        
+        bars, spectrogram = scr.load_or_save_spectrogram_and_bars(persisted_path, "{}\\{}".format(dataset, song_number), "pcp", hop_length)
+                
+        tensor_spectrogram = tf.tensorize_barwise(spectrogram, bars, hop_length_seconds, subdivision)
+        
+        unfolded = tl.unfold(tensor_spectrogram, 2)
+        
+        autosimilarity = as_seg.get_autosimilarity(unfolded, transpose = True, normalize = True)
+        
+        segments = as_seg.dynamic_convolution_computation(autosimilarity, mix = 1, penalty_weight = 0)[0]                
+        segments_in_time = dm.segments_from_bar_to_time(segments, bars)
+                    
+        tp,fp,fn = dm.compute_rates_of_segmentation(references_segments, segments_in_time, window_length = 0.5)
+        prec, rap, f_mes = dm.compute_score_of_segmentation(references_segments, segments_in_time, window_length = 0.5)
+        zero_five_results.append([tp,fp,fn,round(prec,4),round(rap,4),round(f_mes,4)])
+    
+        tp,fp,fn = dm.compute_rates_of_segmentation(references_segments, segments_in_time, window_length = 3)
+        prec, rap, f_mes = dm.compute_score_of_segmentation(references_segments, segments_in_time, window_length = 3)
+        three_results.append([tp,fp,fn,round(prec,4),round(rap,4),round(f_mes,4)])
+    
+    dataframe_zero_five = pd.DataFrame(np.array([np.mean(np.array(zero_five_results)[:,i]) for i in range(6)]), index = ['True Positives','False Positives','False Negatives','Precision', 'Recall', 'F measure'], columns = ["0.5 secondes results {}".format(legend)])
+    display(dataframe_zero_five.T)
+    
+    dataframe_three = pd.DataFrame(np.array([np.mean(np.array(three_results)[:,i]) for i in range(6)]), index = ['True Positives','False Positives','False Negatives','Precision', 'Recall', 'F measure'], columns = ["3 secondes results {}".format(legend)])
+    display(dataframe_three.T)
