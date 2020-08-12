@@ -462,7 +462,7 @@ def sonify_frontiers_song(song_signal, sampling_rate, frontiers_in_seconds, outp
     scipy.io.wavfile.write(output_path, sampling_rate, singal_with_frontiers)
     
 # %% Score calculation encapsulation
-def compute_score_from_frontiers_in_bar(reference, frontiers_in_bar, bars, window = 0.5):
+def compute_score_from_frontiers_in_bar(reference, frontiers_in_bar, bars, window_length = 0.5):
     """
     Computes precision, recall and f measure from estimated frontiers (in bar indexes) and the reference (in seconds).
     Scores are computed from the mir_eval toolbox.
@@ -475,7 +475,7 @@ def compute_score_from_frontiers_in_bar(reference, frontiers_in_bar, bars, windo
         The frontiers between segments, in bar indexes.
     bars : list of tuples
         The bars of the song.
-    window : float, optional
+    window_length : float, optional
         The window size for the score (tolerance for the frontier to be validated).
         The default is 0.5.
 
@@ -497,7 +497,7 @@ def compute_score_from_frontiers_in_bar(reference, frontiers_in_bar, bars, windo
     except:
         raise err.OutdatedBehaviorException("Bars is still a list of downbeats, which is an old beavior, and shouldn't happen anymore. To track and to fix.")
     frontiers_in_time = frontiers_from_bar_to_time(frontiers_in_bar, bars)
-    return compute_score_of_segmentation(reference, frontiers_to_segments(frontiers_in_time), window_length = window)
+    return compute_score_of_segmentation(reference, frontiers_to_segments(frontiers_in_time), window_length = window_length)
 
 def compute_score_of_segmentation(reference, segments_in_time, window_length = 0.5):
     """
