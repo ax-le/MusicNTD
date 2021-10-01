@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
-def plot_me_this_spectrogram(spec, title = "Spectrogram", x_axis = "x_axis", y_axis = "y_axis", invert_y_axis = True, cmap = cm.Greys, figsize = None):
+def plot_me_this_spectrogram(spec, title = "Spectrogram", x_axis = "x_axis", y_axis = "y_axis", invert_y_axis = True, cmap = cm.Greys, figsize = None, norm = None, vmin = None, vmax = None):
     """
     Plots a spectrogram in a colormesh.
     """
@@ -20,7 +20,7 @@ def plot_me_this_spectrogram(spec, title = "Spectrogram", x_axis = "x_axis", y_a
     elif spec.shape[0] == spec.shape[1]:
         plt.figure(figsize=(7,7))
     padded_spec = pad_factor(spec)
-    plt.pcolormesh(np.arange(padded_spec.shape[1]), np.arange(padded_spec.shape[0]), padded_spec, cmap=cmap)
+    plt.pcolormesh(np.arange(padded_spec.shape[1]), np.arange(padded_spec.shape[0]), padded_spec, cmap=cmap, norm = norm, vmin = vmin, vmax = vmax)
     plt.title(title)
     plt.xlabel(x_axis)
     plt.ylabel(y_axis)
@@ -223,3 +223,19 @@ def plot_segments_with_annotations(seg, annot):
     for x in annot:
         plt.plot([x[1], x[1]], [0,np.amax(np.array(seg)[:,2])/10], '-', linewidth=1, color = "red")
     plt.show()
+    
+    
+import pandas as pd
+import IPython.display as ipd
+
+def plot_audio_diff_beta_in_dataframe(signal_beta2, signal_beta1, signal_beta0):
+    """
+    Plots the different reconsiruction with different beta values in a dataframe.
+    Hardcoded for Beta = 2, 1 and 0.
+    """
+    df = pd.DataFrame(np.array([signal_beta2, signal_beta1, signal_beta0]), index = ["beta = 2", "beta = 1", "beta = 0"])
+    #df[0] = df[0].apply(lambda x:x._repr_html_().replace('\n', '').strip())#, axis=1)
+    for i in range(df.shape[1]):
+        df[i] = df[i].T.apply(lambda x:x._repr_html_().replace('\n', '').strip())#, axis=1)
+    df_html = df.T.to_html(escape=False, index=False)
+    ipd.display(ipd.HTML(df_html))
