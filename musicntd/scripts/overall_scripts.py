@@ -8,11 +8,13 @@ Created on Wed Mar  4 17:34:39 2020
 # A module containing some high-level scripts for decomposition and/or segmentation.
 
 import soundfile as sf
-import librosa
+import librosa.core
+import librosa.feature
 import tensorly as tl
 import os
 import numpy as np
 import pathlib
+import random
 
 import nn_fac.ntd as NTD
 
@@ -83,12 +85,12 @@ def load_or_save_bars(persisted_path, song_path):
     bars : list of tuple of floats
         The persisted bars for this song.
     """
-    song_name = song_path.split("\\")[-1].replace(".wav","")
+    song_name = song_path.split("/")[-1].replace(".wav","").replace(".mp3","")
     try:
-        bars = np.load("{}\\bars\\{}.npy".format(persisted_path, song_name))
+        bars = np.load("{}/bars/{}.npy".format(persisted_path, song_name))
     except:
         bars = dm.get_bars_from_audio(song_path)
-        np.save("{}\\bars\\{}".format(persisted_path, song_name), bars)
+        np.save("{}/bars/{}".format(persisted_path, song_name), bars)
     return bars
 
 def load_bars(persisted_path, song_name):
@@ -108,10 +110,10 @@ def load_bars(persisted_path, song_name):
         The persisted bars for this song.
     """
     raise err.OutdatedBehaviorException("You should use load_or_save_bars(persisted_path, song_path) instead, as it handle the fact that bars weren't computed yet.")
-    bars = np.load("{}\\bars\\{}.npy".format(persisted_path, song_name))
+    bars = np.load("{}/bars/{}.npy".format(persisted_path, song_name))
     return bars
     
-def load_or_save_spectrogram(persisted_path, song_path, feature, hop_length, fmin = 98):
+def load_or_save_spectrogram(persisted_path, song_path, feature, hop_length, fmin = 98, n_fft = 2048, n_mfcc = 20):
     """
     Computes the spectrogram for this song, or load it if it were already computed.
 
@@ -134,28 +136,74 @@ def load_or_save_spectrogram(persisted_path, song_path, feature, hop_length, fmi
     spectrogram : numpy array
         The pre-computed spectorgram.
     """
-    song_name = song_path.split("\\")[-1].replace(".wav","")
+    song_name = song_path.split("/")[-1].replace(".wav","").replace(".mp3","")
     try:
-        spectrogram = np.load("{}\\spectrograms\\{}_{}_stereo_{}_{}.npy".format(persisted_path, song_name, feature, hop_length, fmin))
-    except:
+        if "stft" in feature:   
+            if "nfft" not in feature:
+                spectrogram = np.load("{}/spectrograms/{}_{}-nfft{}_stereo_{}.npy".format(persisted_path, song_name, feature, n_fft, hop_length))
+            else:
+                spectrogram = np.load("{}/spectrograms/{}_{}_stereo_{}.npy".format(persisted_path, song_name, feature, hop_length))
+        elif feature == "mel" or feature == "log_mel":
+            raise err.InvalidArgumentValueException("Invalid mel parameter, are't you looking for mel_grill?")
+        elif "mfcc" in feature:
+            if "nmfcc" not in feature:
+                spectrogram = np.load("{}/spectrograms/{}_{}-nmfcc{}_stereo_{}.npy".format(persisted_path, song_name, feature, n_mfcc, hop_length))
+            else:
+                spectrogram = np.load("{}/spectrograms/{}_{}_stereo_{}.npy".format(persisted_path, song_name, feature, hop_length))
+        elif feature == "pcp":
+            spectrogram = np.load("{}/spectrograms/{}_{}_stereo_{}_{}.npy".format(persisted_path, song_name, feature, hop_length, fmin))
+        else:
+            spectrogram = np.load("{}/spectrograms/{}_{}_stereo_{}.npy".format(persisted_path, song_name, feature, hop_length))
+
+    except FileNotFoundError:
         the_signal, original_sampling_rate = sf.read(song_path)
+        #the_signal, original_sampling_rate = librosa.load(song_path)
         if original_sampling_rate != 44100:
             the_signal = librosa.core.resample(np.asfortranarray(the_signal), original_sampling_rate, 44100)
-        if feature == "tonnetz":
-            hop_length = "fixed"
-            fmin = "fixed"
+        if "stft" in feature:
+            if "nfft" not in feature: 
+                spectrogram = features.get_spectrogram(the_signal, 44100, feature, hop_length, n_fft = n_fft)
+                np.save("{}/spectrograms/{}_{}-nfft{}_stereo_{}".format(persisted_path, song_name, feature, n_fft, hop_length), spectrogram)
+                return spectrogram
+            else:              
+                n_fft_arg = int(feature.split("nfft")[1])
+                spectrogram = features.get_spectrogram(the_signal, 44100, feature, hop_length, n_fft = n_fft_arg)
+                np.save("{}/spectrograms/{}_{}_stereo_{}".format(persisted_path, song_name, feature, hop_length), spectrogram)
+                return spectrogram
+        if feature == "mel" or feature == "log_mel":
+            raise err.InvalidArgumentValueException("Invalid mel parameter, are't you looking for mel_grill?")
+        if "mfcc" in feature:
+            if "nmfcc" not in feature:
+                spectrogram = features.get_spectrogram(the_signal, 44100, "mfcc", hop_length, n_mfcc = n_mfcc)
+                np.save("{}/spectrograms/{}_{}-nmfcc{}_stereo_{}".format(persisted_path, song_name, feature, n_mfcc, hop_length), spectrogram)
+                return spectrogram        
+            else:
+                n_mfcc_arg = int(feature.split("nmfcc")[1])
+                spectrogram = features.get_spectrogram(the_signal, 44100, "mfcc", hop_length, n_mfcc = n_mfcc_arg)
+                np.save("{}/spectrograms/{}_{}_stereo_{}".format(persisted_path, song_name, feature, hop_length), spectrogram)
+                return spectrogram
         if feature == "pcp_tonnetz":
             # If chromas are already computed, try to load them instead of recomputing them.
             chromas = load_or_save_spectrogram(persisted_path, song_path, "pcp", hop_length, fmin = fmin)
             spectrogram = librosa.feature.tonnetz(y=None, sr = None, chroma = chromas)
-            np.save("{}\\spectrograms\\{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin), spectrogram)
+            np.save("{}/spectrograms/{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin), spectrogram)
             return spectrogram
-        # If it wasn't pcp_tonnetz, compute the spectrogram, and then save it.
-        spectrogram = features.get_spectrogram(the_signal, 44100, feature, hop_length, fmin = fmin)
-        np.save("{}\\spectrograms\\{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin), spectrogram)
+        # if feature == "tonnetz":
+        #     hop_length = "fixed"
+        #     fmin = "fixed"
+        if feature == "pcp":
+            # If it wasn't pcp_tonnetz, compute the spectrogram, and then save it.
+            spectrogram = features.get_spectrogram(the_signal, 44100, feature, hop_length, fmin = fmin)
+            np.save("{}/spectrograms/{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin), spectrogram)
+            return spectrogram
+        
+        spectrogram = features.get_spectrogram(the_signal, 44100, feature, hop_length)
+        np.save("{}/spectrograms/{}_{}_stereo_{}".format(persisted_path, song_name, feature, hop_length), spectrogram)
+        return spectrogram
+
     return spectrogram
 
-def load_or_save_spectrogram_and_bars(persisted_path, song_path, feature, hop_length, fmin = 98):
+def load_or_save_spectrogram_and_bars(persisted_path, song_path, feature, hop_length, fmin = 98, n_fft = 2048):
     """
     Loads the spectrogram and the bars for this song, which were persisted after a first computation.
 
@@ -181,7 +229,7 @@ def load_or_save_spectrogram_and_bars(persisted_path, song_path, feature, hop_le
         The pre-computed spectorgram.
     """
     bars = load_or_save_bars(persisted_path, song_path)
-    spectrogram = load_or_save_spectrogram(persisted_path, song_path, feature, hop_length, fmin = fmin)
+    spectrogram = load_or_save_spectrogram(persisted_path, song_path, feature, hop_length, fmin = fmin, n_fft = n_fft)
     return bars, spectrogram
 
 
@@ -211,11 +259,11 @@ def load_spectrogram_and_bars(persisted_path, song_name, feature, hop_length, fm
         The pre-computed spectorgram.
     """
     raise err.OutdatedBehaviorException("You should use load_or_save_spectrogram_and_bars(persisted_path, song_path, feature, hop_length, fmin) instead, as it handle the fact that bars weren't computed yet.")
-    bars = np.load("{}\\bars\\{}.npy".format(persisted_path, song_name))
-    spectrogram = np.load("{}\\spectrograms\\{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin))
+    bars = np.load("{}/bars/{}.npy".format(persisted_path, song_name))
+    spectrogram = np.load("{}/spectrograms/{}_{}_stereo_{}_{}".format(persisted_path, song_name, feature, hop_length, fmin))
     return bars, spectrogram
 
-def NTD_decomp_as_script(persisted_path, persisted_arguments, tensor_spectrogram, ranks, init = "chromas"): 
+def NTD_decomp_as_script(persisted_path, persisted_arguments, tensor_spectrogram, ranks, init = "chromas", update_rule = "hals", beta = None): 
     """
     Computes the NTD from the tensor_spectrogram and with specified ranks.
     On the first hand, if the NTD is persisted, it will load and return its results.
@@ -251,65 +299,43 @@ def NTD_decomp_as_script(persisted_path, persisted_arguments, tensor_spectrogram
         The factors of the decomposition.
 
     """
-    path_for_ntd = "{}\\ntd\\{}_{}_{}".format(persisted_path, ranks[0], ranks[1], ranks[2])
-    if "512" in persisted_arguments:
-        raise NotImplementedError("Probably an error in the code, as old hop_length seems to be passed")
-    if persisted_arguments[-2:] == "32":
-        raise NotImplementedError("Probably an error in the code, as the hop_length seems to be passed")
+    if update_rule == "hals":
+        path_for_ntd = "{}/ntd/{}_{}_{}".format(persisted_path, ranks[0], ranks[1], ranks[2])
+    elif update_rule == "mu":
+        path_for_ntd = "{}/ntd_mu/{}_{}_{}".format(persisted_path, ranks[0], ranks[1], ranks[2])
+    else:
+        raise NotImplementedError(f"Update rule type not understood: {update_rule}")
+    
+    if update_rule == "mu" and beta == None:
+        raise NotImplementedError("Inconsistent arguments. Beta should be set if the update_rule is the MU.")
+        
     try:
-        a_core_path = "{}\\core{}.npy".format(path_for_ntd, persisted_arguments)
+        a_core_path = "{}/core{}.npy".format(path_for_ntd, persisted_arguments)
         a_core = np.load(a_core_path)
-        a_factor_path = "{}\\factors{}.npy".format(path_for_ntd, persisted_arguments)
+        a_factor_path = "{}/factors{}.npy".format(path_for_ntd, persisted_arguments)
         a_factor = np.load(a_factor_path, allow_pickle=True)
         return a_core, a_factor
     except FileNotFoundError:
-        core, factors = NTD.ntd(tensor_spectrogram, ranks = ranks, init = init, verbose = False, hals = False,
-                            sparsity_coefficients = [None, None, None, None], normalize = [True, True, False, True], mode_core_norm = 2,
-                            deterministic = True)
+        if update_rule == "hals":
+            core, factors = NTD.ntd(tensor_spectrogram, ranks = ranks, init = init, verbose = False,
+                                sparsity_coefficients = [None, None, None, None], normalize = [True, True, False, True], mode_core_norm = 2,
+                                deterministic = True)
+        elif update_rule == "mu":
+            core, factors = NTD.ntd_mu(tensor_spectrogram, ranks = ranks, init = init, verbose = False, beta = beta, n_iter_max=1000,
+                                sparsity_coefficients = [None, None, None, None], normalize = [True, True, False, True], mode_core_norm = 2,
+                                deterministic = True)
         
         pathlib.Path(path_for_ntd).mkdir(parents=True, exist_ok=True)
     
-        core_path = "{}\\core{}".format(path_for_ntd, persisted_arguments)
+        core_path = "{}/core{}".format(path_for_ntd, persisted_arguments)
         np.save(core_path, core)
-        factors_path = "{}\\factors{}".format(path_for_ntd, persisted_arguments)
+        factors_path = "{}/factors{}".format(path_for_ntd, persisted_arguments)
         np.save(factors_path, factors)
         return core, factors
-
-# %% Outdated and deprecated functions
-
-def run_results_on_signal(tensor_spectrogram, reference_segments, bars, plotting = True):
+    
+def NTD_random_init_to_persist(persisted_path, persisted_arguments, tensor_spectrogram, ranks, seed): 
     """
-    Compute all desired results on the signal (precision, recall and f measure).
-    The window_length is set to 0.5 seconds.
-
-    Parameters
-    ----------
-    tensor_spectrogram : tensorly tensor
-        The tensor_spectrogram of the song.
-    references_segments : list of tuples
-        The segments from the annotations.
-    bars : list of tuple of float
-        The bars of the song.
-    plotting : boolean, optional
-        A boolean whether to plot the autosimilarity with the segmentation or not.
-        The default is True.
-
-    Returns
-    -------
-    all_res : nested list
-        Scores of all computation.
-
-    """
-    unfolded = tl.unfold(tensor_spectrogram, 2)
-    if plotting:
-        plot_spec_with_annotations_abs_ord(as_seg.get_autosimilarity(unfolded, transpose = True, normalize = True), dm.frontiers_from_time_to_bar(dm.segments_to_frontiers(reference_segments), bars), cmap = cm.Greys)
-
-    return compute_all_results(unfolded, reference_segments, bars, window_length = 0.5), compute_all_results(unfolded, reference_segments, bars, window_length = 3)
-
-def run_NTD_on_this_song(persisted_path, persisted_arguments, tensor_spectrogram, ranks, reference_segments, bars, init = "tucker", plotting = True):
-    """
-    Computes (or load) a NTD and returns segmentation scores associated with it.
-    Segmentation techniques are probably outdated though.
+    TODO.
 
     Parameters
     ----------
@@ -320,214 +346,52 @@ def run_NTD_on_this_song(persisted_path, persisted_arguments, tensor_spectrogram
     tensor_spectrogram : tensorly tensor
         The tensor to decompose.
     ranks : list of integers
-        Ranks of this decomposition.
-    reference_segments : list of tuple of floats
-        Annotated segments.
-    bars : list of tuple of floats
-        Bars of the songs.
-    init : String, optional
-        The type of initialization of the NTD.
-        See the NTD module to have more information regarding initialization.
-        The default is "tucker",
-        meaning that the factors will be initialized by HOSVD.
-    plotting : boolean, optional
-        DESCRIPTION. The default is True.
-
-    Returns
-    -------
-    tuple of lists
-        Nested list of segmentation scores at 0.5 and 3 seconds.
-
-    """
-    core, factors = NTD_decomp_as_script(persisted_path, persisted_arguments, tensor_spectrogram, ranks, init = init)
-
-    if plotting:
-        plot_spec_with_annotations_abs_ord(as_seg.get_autosimilarity(factors[2], transpose = True, normalize = True), dm.frontiers_from_time_to_bar(dm.segments_to_frontiers(reference_segments), bars), cmap = cm.Greys)
-
-    return compute_all_results(factors[2], reference_segments, bars, window_length = 0.5), compute_all_results(factors[2], reference_segments, bars, window_length = 3)
-
-def segmentation_from_c_factor(c_factor, normalize_autosimil = False, segmentation = "expanding_mixed"):
-    """
-    Segmenting the C factor (Q matrix, the third one of the decomposition) by computing its autosimilarity.
-    
-    This function is now deprecated as the segmentation measures are old and have been updated since.
-
-    Parameters
-    ----------
-    c_factor : numpy array
-        The third factor of the decomposition (for our case).
-    normalize_autosimil : boolean, optional
-        Whether to normalize the autosimilarity matrix or not.
-        The default is False.
-    segmentation : String, optional
-        Type of the segmentation:
-            - novelty: novelty segmentation
-            - expanding_convolution: segmentation based on the dynamic convolutionnal cost programming algorithm
-            - expanding_mixed: segmentation based on the dynamic convolutionnal cost programming algorithm with novelty penalty on each point (mixed algorithm)
-        The default is "expanding_mixed".
+        Ranks of the decomposition.
+    seed : integer
+        The seed, fixing the random state.
 
     Raises
     ------
     NotImplementedError
-        If a non specified type of segmentation is chosen.
+        Errors in the arguments.
 
     Returns
     -------
-    list of tuples
-        The segmentation of the autosimilarity matrix.
+    core : tensorly tensor
+        The core of the decomposition.
+    factors : numpy array
+        The factors of the decomposition.
 
     """
-    autosimilarity = as_seg.get_autosimilarity(c_factor, transpose = True, normalize = normalize_autosimil)
-    if segmentation == "novelty":
-        ker_size = 16
-        novelty = as_seg.novelty_computation(autosimilarity, ker_size)
-        ends = as_seg.select_highest_peaks_thresholded_indexes(novelty, percentage = 0.22)
-        ends.append(len(autosimilarity) - 1)
-        return dm.frontiers_to_segments(ends)
-    if segmentation == "novelty_max_slope":
-        ker_size = 16
-        novelty = as_seg.novelty_computation(autosimilarity, ker_size)
-        ponderated_novelty = as_seg.values_as_slop(novelty, choice_func = max)
-        ends = as_seg.select_highest_peaks_thresholded_indexes(ponderated_novelty, percentage = 0.08)
-        ends.append(len(autosimilarity) - 1)
-        return dm.frontiers_to_segments(ends)
-    if segmentation == "novelty_min_slope":
-        ker_size = 16
-        novelty = as_seg.novelty_computation(autosimilarity, ker_size)
-        ponderated_novelty = as_seg.values_as_slop(novelty, choice_func = min)
-        ends = as_seg.select_highest_peaks_thresholded_indexes(ponderated_novelty, percentage = 0.16)
-        ends.append(len(autosimilarity) - 1)
-        return dm.frontiers_to_segments(ends)
-    if segmentation == "novelty_mean_slope":
-        ker_size = 16
-        novelty = as_seg.novelty_computation(autosimilarity, ker_size)
-        ponderated_novelty = as_seg.values_as_slop(novelty, choice_func = as_seg.mean)
-        ends = as_seg.select_highest_peaks_thresholded_indexes(ponderated_novelty, percentage = 0.13)
-        ends.append(len(autosimilarity) - 1)
-        return dm.frontiers_to_segments(ends)
-    elif segmentation == "expanding_convolution":
-        return as_seg.dynamic_convolution_computation(autosimilarity, mix = 1)[0]
-    elif segmentation == "expanding_mixed":
-        return as_seg.dynamic_convolution_computation(autosimilarity, mix = 0.5)[0]
-    else:
-        raise NotImplementedError("Other types are not implemtend yet")
+    path_for_ntd = "{}/ntd_several_random_init/{}_{}_{}".format(persisted_path, ranks[0], ranks[1], ranks[2])
+    if "512" in persisted_arguments:
+        raise NotImplementedError("Probably an error in the code, as old hop_length seems to be passed")
+    if persisted_arguments[-2:] == "32":
+        raise NotImplementedError("Probably an error in the code, as the hop_length seems to be passed")
+    try:
+        a_core_path = "{}/core{}_{}.npy".format(path_for_ntd, persisted_arguments, seed)
+        a_core = np.load(a_core_path)
+        a_factor_path = "{}/factors{}_{}.npy".format(path_for_ntd, persisted_arguments, seed)
+        a_factor = np.load(a_factor_path, allow_pickle=True)
+        return a_core, a_factor
+    except FileNotFoundError:
+        factors_0 = []
+        for mode in range(len(tensor_spectrogram.shape)):
+            seeded_random = np.random.RandomState(seed)
+            random_array = seeded_random.rand(tensor_spectrogram.shape[mode], ranks[mode])
+            factors_0.append(tl.tensor(random_array))
+
+        seeded_random = np.random.RandomState(seed)
+        core_0 = tl.tensor(seeded_random.rand(np.prod(ranks)).reshape(tuple(ranks)))
         
-def compute_all_results(c_factor, references_segments, bars, window_length = 0.5):
-    """
-    Compute all desired results (precision, recall and f measure, encapsulated by the data_manipulation compute_score_of_segmentation() function).
-    
-    This function is now deprecated as the segmentation measures are old and have been updated since.
-
-    Parameters
-    ----------
-    c_factor : numpy array
-        The third factor of the NTD decomposition.
-    references_segments : list of tuples
-        The segments from the annotations.
-    bars : list of tuple of float
-        The bars of the song.
-    window_length : float, optional
-        The window tolerance for the frontiers. The default is 0.5.
-
-    Returns
-    -------
-    all_res : nested list
-        Scores of all computation.
-
-    """
-    all_res = []
+        core, factors = NTD.compute_ntd(tensor_spectrogram, ranks, core_0, factors_0, n_iter_max=100, tol=1e-6,
+                                       sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [True, True, False, True], hals = False,mode_core_norm=2,
+                                       verbose=False, return_errors=False, deterministic=True)
         
-    # Novelty scores
-    # novelty_segments = segmentation_from_c_factor(c_factor, normalize_autosimil=False, segmentation="novelty")
-    # novelty_segments_in_time = dm.segments_from_bar_to_time(novelty_segments, dbt)
-    # all_res.append(dm.compute_score_of_segmentation(references_segments, novelty_segments_in_time, window_length=window_length))
+        pathlib.Path(path_for_ntd).mkdir(parents=True, exist_ok=True)
     
-    novelty_segments_on_normalized = segmentation_from_c_factor(c_factor, normalize_autosimil=True, segmentation="novelty")
-    novelty_segments_on_normalized_in_time = dm.segments_from_bar_to_time(novelty_segments_on_normalized, bars)
-    all_res.append(dm.compute_score_of_segmentation(references_segments, novelty_segments_on_normalized_in_time, window_length=window_length))
-
-    # New novelty peak picking
-    # ponderated_novelty_segments = segmentation_from_c_factor(c_factor, normalize_autosimil=False, segmentation="novelty_max_slope")
-    # ponderated_novelty_segments_in_time = dm.segments_from_bar_to_time(ponderated_novelty_segments, dbt)
-    # all_res.append(dm.compute_score_of_segmentation(references_segments, ponderated_novelty_segments_in_time, window_length=window_length))
-    
-    ponderated_novelty_segments_on_normalized = segmentation_from_c_factor(c_factor, normalize_autosimil=True, segmentation="novelty_max_slope")
-    ponderated_novelty_segments_on_normalized_in_time = dm.segments_from_bar_to_time(ponderated_novelty_segments_on_normalized, bars)
-    all_res.append(dm.compute_score_of_segmentation(references_segments, ponderated_novelty_segments_on_normalized_in_time, window_length=window_length))
-    
-    ponderated_novelty_segments_on_normalized_2 = segmentation_from_c_factor(c_factor, normalize_autosimil=True, segmentation="novelty_min_slope")
-    ponderated_novelty_segments_on_normalized_in_time_2 = dm.segments_from_bar_to_time(ponderated_novelty_segments_on_normalized_2, bars)
-    all_res.append(dm.compute_score_of_segmentation(references_segments, ponderated_novelty_segments_on_normalized_in_time_2, window_length=window_length))
-    
-    ponderated_novelty_segments_on_normalized_3 = segmentation_from_c_factor(c_factor, normalize_autosimil=True, segmentation="novelty_mean_slope")
-    ponderated_novelty_segments_on_normalized_in_time_3 = dm.segments_from_bar_to_time(ponderated_novelty_segments_on_normalized_3, bars)
-    all_res.append(dm.compute_score_of_segmentation(references_segments, ponderated_novelty_segments_on_normalized_in_time_3, window_length=window_length))
-    # Convolution scores
-    # conv_segments = segmentation_from_c_factor(c_factor, normalize_autosimil=False, segmentation="expanding_convolution")
-    # conv_segments_in_time = dm.segments_from_bar_to_time(conv_segments, dbt)
-    # all_res.append(dm.compute_score_of_segmentation(references_segments, conv_segments_in_time, window_length=window_length))
-    
-    conv_segments_on_normalized = segmentation_from_c_factor(c_factor, normalize_autosimil=True, segmentation="expanding_convolution")
-    conv_segments_on_normalized_in_time = dm.segments_from_bar_to_time(conv_segments_on_normalized, bars)
-    all_res.append(dm.compute_score_of_segmentation(references_segments, conv_segments_on_normalized_in_time, window_length=window_length))
-  
-    # Mixed scores
-    # conv_and_novelty_segments = segmentation_from_c_factor(c_factor, normalize_autosimil=False, segmentation="expanding_mixed")
-    # conv_and_novelty_segments_in_time = dm.segments_from_bar_to_time(conv_and_novelty_segments, dbt)
-    # all_res.append(dm.compute_score_of_segmentation(references_segments, conv_and_novelty_segments_in_time, window_length=window_length))
-    
-    conv_and_novelty_segments_on_normalized = segmentation_from_c_factor(c_factor, normalize_autosimil=True, segmentation="expanding_mixed")
-    conv_and_novelty_segments_on_normalized_in_time = dm.segments_from_bar_to_time(conv_and_novelty_segments_on_normalized, bars)
-    all_res.append(dm.compute_score_of_segmentation(references_segments, conv_and_novelty_segments_on_normalized_in_time, window_length=window_length))
-    
-    return all_res
-      
-# def old_and_for_midi_load_RWC_dataset(folder_path, desired_format = "wav", downbeats = True):
-#     """
-#     Load the data on the RWC dataset, ie path of songs and annotations.
-
-#     Parameters
-#     ----------
-#     folder_path : String
-#         Path of the folder to parse.
-#     desired_format : String, optional
-#         The format of song files to study.
-#         The default is "wav".
-#     downbeats : boolean, optional
-#         Whether to list the paths of downbeats or not.
-#         The default is True.
-
-#     Raises
-#     ------
-#     NotImplementedError
-#         If the format is not taken in account.
-
-#     Returns
-#     -------
-#     numpy array
-#         list of list of paths, each sublist being of the form [song, annotations, downbeat(if specified)].
-
-#     """
-#     # Load dataset paths at the format "song, annotations, downbeats"
-#     paths = []
-#     if desired_format == "mid":
-#         for file in os.listdir(folder_path):
-#             if file[-4:] == ".mid":
-#                 if downbeats == True:
-#                     paths.append([file, file.replace("mid", "chorus.txt").upper(), file.replace("mid", "beat.txt").upper()])
-#                 else:
-#                     paths.append([file, file.replace("mid", "chorus.txt").upper()])
-#         return np.array(paths)
-#     elif desired_format == "wav":
-#         for file in os.listdir(folder_path):
-#             if file[-4:] == ".wav":
-#                 file_number = "{:03d}".format(int(file[:-4]))
-#                 annotations_prefix = "RM-P"
-#                 if downbeats == True:
-#                     paths.append([file, annotations_prefix + file_number + (".chorus.txt").upper(), annotations_prefix + file_number + (".beat.txt").upper()])
-#                 else:
-#                     paths.append([file, annotations_prefix + file_number + (".chorus.txt").upper()])
-#         return np.array(paths)
-#     else:
-#         raise NotImplementedError("Unknown format.")
-       
+        core_path = "{}/core{}_{}".format(path_for_ntd, persisted_arguments, seed)
+        np.save(core_path, core)
+        factors_path = "{}/factors{}_{}".format(path_for_ntd, persisted_arguments, seed)
+        np.save(factors_path, factors)
+        return core, factors
