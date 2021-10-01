@@ -40,7 +40,7 @@ def tensorize_barwise(spectrogram, bars, hop_length_seconds, subdivision, midi =
     """
     freq_len = spectrogram.shape[0]
     hop = int(hop_length_seconds*44100)
-    if hop != 32:
+    if hop != 32 and hop != 64:
         print("hop_length a 44100Hz = " + str(hop) + ", normal ?")
     bars_idx = dm.segments_from_time_to_frame_idx(bars[1:], hop_length_seconds)
     #if hop == 512:
