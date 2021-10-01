@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Feb 21 15:09:10 2020
 
-@author: amarmore
-"""
+# Created on Fri Feb 21 15:09:10 2020
+
+# @author: amarmore
+
 
 # A file which contains all code regarding conversion of data, or extracting information from it
 # (typically getting the bars, converting segments in frontiers, sonifying segmentation or computing its score).
@@ -538,6 +538,34 @@ def compute_score_of_segmentation(reference, segments_in_time, window_length = 0
             if est_intervals[idx][0] != est_intervals[idx][1]:
                 cleaned_intervals.append(est_intervals[idx])
         return mir_eval.segment.detection(ref_intervals, np.array(cleaned_intervals), window = window_length, trim = False)
+
+def compute_median_deviation_of_segmentation(reference, segments_in_time):
+    """
+    TODO
+
+    Parameters
+    ----------
+    reference : list of tuples
+        The reference annotations, as a list of tuples (start, end), in seconds.
+    segments_in_time : list of tuples
+        The segments, in seconds, as tuples (start, end).
+
+    Returns
+    -------
+    TODO
+    r_to_e then e_to_r
+
+    """
+    ref_intervals, useless = mir_eval.util.adjust_intervals(reference,t_min=0)
+    est_intervals, useless = mir_eval.util.adjust_intervals(np.array(segments_in_time), t_min=0, t_max=ref_intervals[-1, 1])
+    try:
+        return mir_eval.segment.deviation(ref_intervals,est_intervals)
+    except ValueError:
+        cleaned_intervals = []
+        for idx in range(len(est_intervals)):
+            if est_intervals[idx][0] != est_intervals[idx][1]:
+                cleaned_intervals.append(est_intervals[idx])
+        return mir_eval.segment.deviation(ref_intervals,est_intervals)
 
 def compute_rates_of_segmentation(reference, segments_in_time, window_length = 0.5):
     """
