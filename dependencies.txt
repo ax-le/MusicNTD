@@ -1,6 +1,7 @@
  - librosa
  - madmom
  - mir_eval
+ - mirdata
  - nn-fac
  - numpy
  - pandas (for tables in the notebooks, not used otehrwise).

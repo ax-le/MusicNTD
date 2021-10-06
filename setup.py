@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="musicntd",
-    version="0.2.0",
+    version="0.3.0",
     author="Marmoret Axel",
     author_email="axel.marmoret@irisa.fr",
     description="Package for NTD applied on musical segmentation",
@@ -28,7 +28,8 @@ setuptools.setup(
         'madmom',
         'matplotlib',
         'mir_eval',
-        'nn-fac >= 0.1.2',
+        'mirdata',
+        'nn-fac == 0.2.0',
         'numpy >= 1.18.0',
         'pandas',
         'scipy >= 0.13.0',
